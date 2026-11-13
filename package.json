@@ -1,0 +1,12 @@
+{
+  "name": "playroom",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A small online game room with Gomoku and room-based multiplayer.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
