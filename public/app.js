@@ -7,11 +7,12 @@ const turnIcon = document.querySelector('#turnIcon');
 const onlineSetup = document.querySelector('#onlineSetup');
 const difficulty = document.querySelector('#difficulty');
 const roomMessage = document.querySelector('#roomMessage');
+const resultOverlay = document.querySelector('#resultOverlay');
 let board, mode = 'ai', turn = 1, over = false, humanSide = 1, socket = null, roomCode = '', onlineSide = null;
 
 function gameRoute(nextMode = mode) { return `#game/gomoku/${nextMode}`; }
 
-function resetBoard() { board = Array.from({ length: SIZE }, () => Array(SIZE).fill(0)); turn = 1; over = false; lastStone = null; render(); updateTurn(); }
+function resetBoard() { board = Array.from({ length: SIZE }, () => Array(SIZE).fill(0)); turn = 1; over = false; lastStone = null; resultOverlay.hidden=true; resultOverlay.classList.remove('celebrate','commiserate'); boardEl.classList.remove('game-finished'); render(); updateTurn(); }
 function render() {
   boardEl.replaceChildren();
   for (let y=0;y<SIZE;y++) for (let x=0;x<SIZE;x++) {
@@ -50,7 +51,23 @@ function updateTurn() {
   turnText.textContent=current; turnIcon.classList.toggle('white-turn',turn===2); turnIcon.textContent=turn===1?'●':'○';
 }
 function hasWon(x,y,side) { for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]) { let count=1; for(const sign of [-1,1]){let cx=x+dx*sign,cy=y+dy*sign;while(cx>=0&&cx<SIZE&&cy>=0&&cy<SIZE&&board[cy][cx]===side){count++;cx+=dx*sign;cy+=dy*sign;}} if(count>=5)return true;} return false; }
-function finish(side) { over=true; turnText.textContent=side===0?'平局':mode==='local'?(side===1?'黑方获胜':'白方获胜'):side===(mode==='online'?onlineSide+1:humanSide)?'你赢了':'你输了'; }
+function finish(side) {
+  if(over)return;
+  over=true;boardEl.classList.add('game-finished');
+  const local=mode==='local';
+  const won=side!==0&&(local||side===(mode==='online'?onlineSide+1:humanSide));
+  const title=side===0?'平局':local?(side===1?'黑方获胜':'白方获胜'):won?'你赢了':'你输了';
+  const detail=side===0?'棋盘已满，再来一局吧':local?'五子连珠，本局结束':mode==='online'?(won?'恭喜你连成五子':'对手先连成五子'):(won?'恭喜你连成五子':'AI 先连成五子');
+  turnText.textContent=title;
+  document.querySelector('#resultTitle').textContent=title;
+  document.querySelector('#resultDetail').textContent=detail;
+  document.querySelector('#resultEyebrow').textContent=side===0?'GAME DRAW':won?'VICTORY':'GAME OVER';
+  document.querySelector('#resultMark').textContent=side===0?'＝':won?'✓':'×';
+  document.querySelector('#resultBadge').className=`result-badge ${side===0?'draw':won?'win':'loss'}`;
+  resultOverlay.classList.toggle('celebrate',won);
+  resultOverlay.classList.toggle('commiserate',side!==0&&!won);
+  resultOverlay.hidden=false;
+}
 function play(x,y) {
   if(over||board[y][x])return;
   if(mode==='online') { if(!socket||socket.readyState!==WebSocket.OPEN||onlineSide===null||turn!==onlineSide+1)return; socket.send(JSON.stringify({type:'move',x,y})); return; }
@@ -91,6 +108,9 @@ document.querySelector('#quickAi').addEventListener('click',()=>openGame('ai'));
 document.querySelector('#backLobby').addEventListener('click',closeGame);
 document.querySelectorAll('.mode-tab').forEach(tab=>tab.addEventListener('click',()=>{const next=tab.dataset.mode;if(location.hash!==gameRoute(next))history.pushState(null,'',gameRoute(next));setMode(next);}));
 document.querySelector('#restart').addEventListener('click',()=>{if(mode==='online'&&socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:'restart'}));else resetBoard();});
+document.querySelector('#resultRestart').addEventListener('click',()=>document.querySelector('#restart').click());
+document.querySelector('#resultClose').addEventListener('click',()=>{resultOverlay.hidden=true;resultOverlay.classList.remove('celebrate','commiserate');});
+document.querySelector('#resultLobby').addEventListener('click',()=>{resultOverlay.hidden=true;resultOverlay.classList.remove('celebrate','commiserate');closeGame();});
 document.querySelector('#createRoom').addEventListener('click',()=>connect(true));
 document.querySelector('#joinRoom').addEventListener('click',()=>connect(false));
 document.querySelector('#copyRoom').addEventListener('click',async()=>{const code=document.querySelector('#roomCode').value.trim();if(!code)return;try{await navigator.clipboard.writeText(code);roomMessage.textContent=`房间码 ${code} 已复制，发给好友即可加入。`;}catch{document.querySelector('#roomCode').select();roomMessage.textContent='已选中房间码，请复制后发给好友。';}});

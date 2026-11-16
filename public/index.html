@@ -42,6 +42,17 @@
     <section class="online-setup" id="onlineSetup" hidden><div class="online-setup-copy"><span class="setup-icon">↗</span><div><h2>和好友来一局</h2><p>创建房间并分享房间码，或输入好友的房间码加入。</p></div></div><div class="setup-actions"><button class="primary-button" id="createRoom">创建房间 <span>＋</span></button><div class="join-controls"><input id="roomCode" maxlength="6" placeholder="输入 4–6 位房间码" autocomplete="off"><button id="joinRoom">加入房间 <span>→</span></button><button id="copyRoom" class="copy-room" type="button" title="复制房间码" aria-label="复制房间码">复制</button></div></div><p id="roomMessage" class="room-message">房间创建后会显示在这里。</p></section>
     <div class="play-area"><div class="board-wrap"><div id="board" class="board" role="grid" aria-label="五子棋棋盘"></div></div><aside class="game-sidebar"><div class="turn-card"><div class="turn-icon" id="turnIcon">●</div><div><span class="eyebrow">CURRENT TURN</span><strong id="turnText">你的回合</strong></div></div><div class="difficulty" id="difficulty"><label for="level">AI 难度</label><select id="level"><option value="easy">轻松</option><option value="normal" selected>标准</option><option value="hard">挑战</option></select></div><div class="sidebar-divider"></div><div class="game-actions"><button class="outline-button" id="restart">重新开始</button></div><div class="player-legend" id="playerLegend"><span><i class="legend-stone black-stone"></i><span id="blackLabel">你 · 黑棋</span></span><span><i class="legend-stone white-stone"></i><span id="whiteLabel">AI · 白棋</span></span></div><p class="hint" id="gameHint">先连成五子的一方获胜。</p></aside></div>
   </main>
+  <div id="resultOverlay" class="result-overlay" hidden>
+    <div class="fireworks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <section class="result-dialog" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+      <button class="result-close" id="resultClose" aria-label="关闭结果">×</button>
+      <div id="resultBadge" class="result-badge"><span id="resultMark">✓</span></div>
+      <span id="resultEyebrow" class="result-eyebrow">VICTORY</span>
+      <h2 id="resultTitle">你赢了！</h2>
+      <p id="resultDetail">五子连珠，本局获胜</p>
+      <div class="result-actions"><button class="result-again" id="resultRestart">再来一局 <span>↻</span></button><button class="result-lobby" id="resultLobby">返回大厅</button></div>
+    </section>
+  </div>
   <script src="/app.js"></script>
 </body>
 </html>
