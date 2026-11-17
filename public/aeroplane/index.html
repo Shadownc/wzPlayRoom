@@ -442,6 +442,17 @@
                                                             <button type="button" class="takeoff-rule-option" data-value="six" aria-pressed="false"><span class="takeoff-rule-dice">6</span><span>起飞</span></button>
                                                         </div>
                                                     </div>
+                                                    <div class="team-mode-setting">
+                                                        <div class="toggle-option">
+                                                            <span class="toggle-label-text">组队对战</span>
+                                                            <label class="toggle-switch"><input type="checkbox" id="onlineTeamMode"><span class="toggle-slider"></span></label>
+                                                        </div>
+                                                        <div class="team-player-options" id="onlineTeamPlayers" style="display:none">
+                                                            <span class="team-player-label">每位玩家</span>
+                                                            <div class="team-player-list" id="onlineTeamPlayerList"></div>
+                                                            <span class="team-mode-hint">踩到单枚队友棋子会送回基地；踩到队友叠子奖励前进 2 格。任一队友棋子全部到终点，本队获胜。</span>
+                                                        </div>
+                                                    </div>
                                                     <!-- 道具模式的起手积分 -->
                                                     <div class="initial-energy" id="onlineInitialEnergy" style="display: none;">
                                                         <div class="initial-energy-head"><span>初始积分</span><span class="initial-energy-value" id="onlineInitialEnergyValue">0</span></div>

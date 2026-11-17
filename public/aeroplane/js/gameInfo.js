@@ -316,7 +316,7 @@ class GameInfo {
                 return this.formatChessMove(player, data.chessIndex, data.fromPosition, data.toPosition, data.moveType);
 
             case 'chess_beat':
-                return this.formatChessBeat(player, data.targetPlayer, data.targetChess, data.position);
+                return this.formatChessBeat(player, data.targetPlayer, data.targetChess, data.position, data.teamCapture);
 
             case 'title_earned':
                 return this.formatTitleEarned(player, data.titleName, data.tier);
@@ -477,11 +477,11 @@ class GameInfo {
     }
 
     // 格式化棋子击败消息
-    formatChessBeat(player, targetPlayer, targetChess, position) {
+    formatChessBeat(player, targetPlayer, targetChess, position, teamCapture = false) {
         const playerName = this.getPlayerName(player);
         const targetPlayerName = this.getPlayerName(targetPlayer);
         const playerSpan = `<span class="player-text player-${player}">${playerName}</span>`;
-        const actionSpan = `<span class="beat-text"> 击败 </span>`;
+        const actionSpan = `<span class="beat-text"> ${teamCapture ? '收回队友棋子' : '击败'} </span>`;
         const targetSpan = `<span class="player-text player-${targetPlayer}">${targetPlayerName}</span>`;
         const exclamationSpan = `<span class="action-text">！</span>`;
 
@@ -816,11 +816,11 @@ class GameInfo {
     }
 
     // 便捷方法：添加棋子击败信息
-    addChessBeat(player, targetPlayer, targetChess, skipSync = false, isRemoteDiceMove = false, energy = null) {
+    addChessBeat(player, targetPlayer, targetChess, skipSync = false, isRemoteDiceMove = false, energy = null, teamCapture = false) {
         this.addMessage({
             type: 'chess_beat',
             player: player,
-            data: { targetPlayer, targetChess, isRemoteDiceMove, energy }
+            data: { targetPlayer, targetChess, isRemoteDiceMove, energy, teamCapture }
         }, skipSync);
     }
 

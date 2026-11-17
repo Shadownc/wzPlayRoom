@@ -27,6 +27,7 @@ class GameState {
         this.isThreeSixesPenaltyActive = false; // 三次6惩罚是否正在执行中
         this.happyMode = false; // 欢乐模式标志
         this.takeoffRule = 'even'; // 起飞点数规则：even 为 2/4/6，six 为仅 6
+        this.teams = null;
 
         // 棋子数量配置
         this.pieceCount = 4; // 默认每个玩家4个棋子

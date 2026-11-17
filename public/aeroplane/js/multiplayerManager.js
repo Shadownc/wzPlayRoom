@@ -489,6 +489,73 @@ class MultiplayerManager {
                 : { settings: { takeoffRule } });
         });
 
+        const teamModeCheckbox = document.getElementById('onlineTeamMode');
+        const teamPlayerList = document.getElementById('onlineTeamPlayerList');
+        const setTeamMode = enabled => {
+            const roomSettings = this.currentRoom?.settings || {};
+            if (teamModeCheckbox) {
+                teamModeCheckbox.checked = Boolean(roomSettings.teamMode);
+                teamModeCheckbox.disabled = !this.isHost;
+            }
+            const teams = roomSettings.teams || { 1: 1, 2: 2, 3: 1, 4: 2 };
+            const section = document.getElementById('onlineTeamPlayers');
+            if (section) section.style.display = enabled ? 'flex' : 'none';
+            if (!teamPlayerList) return;
+            teamPlayerList.replaceChildren();
+            for (let color = 1; color <= 4; color += 1) {
+                const row = document.createElement('div');
+                row.className = `team-player-row team-color-${color}`;
+                const name = document.createElement('span');
+                const player = Array.from(this.players.values()).find(item => Number(item.color) === color);
+                name.textContent = player?.nickname || `空位 ${color}`;
+                const choices = document.createElement('div');
+                choices.className = 'team-choice';
+                for (const team of [1, 2]) {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.textContent = `队伍 ${team}`;
+                    button.classList.toggle('selected', Number(teams[color]) === team);
+                    button.disabled = !this.isHost;
+                    button.addEventListener('click', () => {
+                        if (!this.isHost || !this.wsClient) return;
+                        const nextTeams = { ...teams, [color]: team };
+                        const occupied = Array.from(this.players.values()).map(item => Number(item.color));
+                        if (!occupied.includes(color)) occupied.push(color);
+                        if (!occupied.some(seat => nextTeams[seat] === 1) || !occupied.some(seat => nextTeams[seat] === 2)) {
+                            this.showError('每队至少需要一位玩家');
+                            return;
+                        }
+                        this.currentRoom.settings.teams = nextTeams;
+                        setTeamMode(true);
+                        this.wsClient.sendMessage('updateSettings', this.wsClient.serverUrl?.includes('/flight-ws')
+                            ? { teams: nextTeams }
+                            : { settings: { teams: nextTeams } });
+                    });
+                    choices.appendChild(button);
+                }
+                row.append(name, choices);
+                teamPlayerList.appendChild(row);
+            }
+        };
+        this.renderTeamSettings = setTeamMode;
+        teamModeCheckbox?.addEventListener('change', event => {
+            if (!this.isHost || !this.wsClient) return;
+            const teamMode = event.target.checked;
+            if (teamMode && this.players.size !== 4) {
+                event.target.checked = false;
+                this.showError('组队对战需要 4 位玩家加入后才能开启');
+                return;
+            }
+            if (!this.currentRoom) this.currentRoom = { settings: {} };
+            this.currentRoom.settings ||= {};
+            this.currentRoom.settings.teamMode = teamMode;
+            this.currentRoom.settings.teams ||= { 1: 1, 2: 2, 3: 1, 4: 2 };
+            setTeamMode(teamMode);
+            this.wsClient.sendMessage('updateSettings', this.wsClient.serverUrl?.includes('/flight-ws')
+                ? { teamMode, teams: this.currentRoom.settings.teams }
+                : { settings: { teamMode, teams: this.currentRoom.settings.teams } });
+        });
+
         const pieceCountContainer = document.getElementById('roomConfig')?.querySelector('.piece-count-selector');
         pieceCountContainer?.querySelectorAll('.piece-count-option').forEach(option => {
             option.addEventListener('click', () => {
@@ -1231,6 +1298,13 @@ class MultiplayerManager {
             onlineTakeoffRule.value = settings.takeoffRule === 'six' ? 'six' : 'even';
             onlineTakeoffRule.dispatchEvent(new Event('change', { bubbles: true }));
         }
+        const teamModeCheckbox = document.getElementById('onlineTeamMode');
+        if (teamModeCheckbox && settings.teamMode !== undefined) {
+            teamModeCheckbox.checked = Boolean(settings.teamMode);
+            this.renderTeamSettings?.(teamModeCheckbox.checked);
+        }
+        if (teamModeCheckbox) teamModeCheckbox.disabled = !this.isHost;
+        this.renderTeamSettings?.(Boolean(settings.teamMode));
 
         const pieceCount = settings.pieceCount;
         if (pieceCount !== undefined && typeof this.updatePieceCountDisplay === 'function') {
@@ -1306,6 +1380,7 @@ class MultiplayerManager {
                 }
                 if (data.room) {
                     this.currentRoom = data.room;
+                    if (data.room.players) this.players = new Map(data.room.players.map(item => [item.id, item]));
                 }
 
                 const nextValue = data.room ? !!data.room.isPrivate : !!this.currentRoom.isPrivate;
@@ -1416,6 +1491,7 @@ class MultiplayerManager {
                     // 保存房间号到重连管理器（房主也需要保存）
                     reconnectManager.updateRoomCode(this.roomCode);
                     this.syncPlayerStats();
+                    this.renderTeamSettings?.(Boolean(roomData.settings?.teamMode));
 
                     // 同步道具/欢乐模式复选框状态
                     this.applyRoomSettingsToControls(roomData.settings);
@@ -1587,6 +1663,7 @@ class MultiplayerManager {
 
                 // 同步道具/欢乐模式复选框状态
                 this.applyRoomSettingsToControls(data.room.settings);
+                this.renderTeamSettings?.(Boolean(data.room.settings?.teamMode));
 
                 // 恢复棋子个数显示
                 if (data.room.settings && data.room.settings.pieceCount) {
@@ -1984,6 +2061,7 @@ class MultiplayerManager {
                     this.updateRoomInfo();
                     this.updateStartGameButton();
                     this.applyRoomSettingsToControls(data.room.settings);
+                    this.renderTeamSettings?.(Boolean(data.room.settings?.teamMode));
                 }
                 break;
 
@@ -2022,6 +2100,7 @@ class MultiplayerManager {
 
                     // 把服务端的房间设置回填到配置面板（重进房间最容易漏的一步）
                     this.applyRoomSettingsToControls(data.room.settings);
+                    this.renderTeamSettings?.(Boolean(data.room.settings?.teamMode));
 
                     // 重建离线玩家倒计时
                     for (const [, p] of this.players) {
@@ -2119,6 +2198,10 @@ class MultiplayerManager {
                 // 使用服务器返回的完整房间数据
                 if (data.room) {
                     this.currentRoom = data.room;
+                    if (data.room.players) {
+                        this.players.clear();
+                        data.room.players.forEach(player => this.players.set(player.id, player));
+                    }
                 } else {
                     // 降级处理：如果没有完整房间数据，只更新设置
                     if (!this.currentRoom) {
@@ -2206,6 +2289,7 @@ class MultiplayerManager {
 
                 // 更新道具/欢乐模式复选框状态
                 this.applyRoomSettingsToControls(data.settings);
+                this.renderTeamSettings?.(Boolean(this.currentRoom?.settings?.teamMode));
 
                 // 更新房间信息显示（包括游戏配置）
                 this.updateRoomInfo();
@@ -4138,6 +4222,9 @@ class MultiplayerManager {
             if (skillBox) settings.skillMode = skillBox.checked;
             if (happyBox) settings.happyMode = happyBox.checked;
             if (takeoffRuleSelect) settings.takeoffRule = takeoffRuleSelect.value === 'six' ? 'six' : 'even';
+            const teamModeCheckbox = document.getElementById('onlineTeamMode');
+            if (teamModeCheckbox) settings.teamMode = teamModeCheckbox.checked;
+            if (settings.teamMode) settings.teams = this.currentRoom?.settings?.teams || { 1: 1, 2: 2, 3: 1, 4: 2 };
             if (energySlider) settings.initialEnergy = [0, 15, 30, 50, 70, 100][Number(energySlider.value) || 0] || 0;
             const selectedPieceCount = document.querySelector('#roomConfig .piece-count-option.selected')
                 || document.querySelector('#roomConfig .piece-count-option.active');
@@ -4159,6 +4246,9 @@ class MultiplayerManager {
         if (happyBox) settings.happyMode = happyBox.checked;
         const takeoffRuleSelect = document.getElementById('onlineTakeoffRule');
         if (takeoffRuleSelect) settings.takeoffRule = takeoffRuleSelect.value === 'six' ? 'six' : 'even';
+        const teamModeCheckbox = document.getElementById('onlineTeamMode');
+        if (teamModeCheckbox) settings.teamMode = teamModeCheckbox.checked;
+        if (settings.teamMode) settings.teams = this.currentRoom?.settings?.teams || { 1: 1, 2: 2, 3: 1, 4: 2 };
         const energySlider = document.getElementById('onlineInitialEnergySlider');
         if (energySlider) settings.initialEnergy = [0, 15, 30, 50, 70, 100][Number(energySlider.value) || 0] || 0;
 
@@ -4221,6 +4311,8 @@ class MultiplayerManager {
             ? gameData.happyMode
             : (this.currentRoom?.settings?.happyMode || false);
         const takeoffRule = gameData.takeoffRule === 'six' || this.currentRoom?.settings?.takeoffRule === 'six' ? 'six' : 'even';
+        const teamMode = gameData.teamMode !== undefined ? Boolean(gameData.teamMode) : Boolean(this.currentRoom?.settings?.teamMode);
+        const teams = teamMode ? (gameData.teams || this.currentRoom?.settings?.teams || { 1: 1, 2: 2, 3: 1, 4: 2 }) : null;
         console.log('[配置] 欢乐模式:', happyModeEnabled, '(isHost:', this.isHost, ')');
 
         // 设置正确的gameConfig，确保按钮显示正确
@@ -4230,7 +4322,9 @@ class MultiplayerManager {
             pieceCount: gameData.pieceCount || 4,
             skillMode: skillModeEnabled,
             happyMode: happyModeEnabled,
-            takeoffRule
+            takeoffRule,
+            teamMode,
+            teams
         };
 
         console.log('[配置] 最终保存的gameConfig:', gameConfig);
@@ -4247,6 +4341,8 @@ class MultiplayerManager {
             skillMode: skillModeEnabled, // 明确添加道具模式配置
             happyMode: happyModeEnabled, // 明确添加欢乐模式配置
             takeoffRule,
+            teamMode,
+            teams,
             wsClient: {
                 playerId: this.wsClient.playerId,
                 serverUrl: this.wsClient.serverUrl

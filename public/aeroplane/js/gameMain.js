@@ -157,6 +157,7 @@ class FlyingChessGame extends FlyingChessGameBase {
                         happy: gameState.isHappyMode(),
                         skillMode: gameState.isSkillModeEnabled(),
                         takeoffRule: gameState.takeoffRule || 'even',
+                        teams: gameState.teams || null,
                         startEnergy: gameState.getInitialEnergy(),
                         currentPlayer: gameState.currentPlayer
                     });
@@ -366,7 +367,8 @@ class FlyingChessGame extends FlyingChessGameBase {
                     pieceCount: multiplayerGameData.pieceCount || 4,
                     skillMode: multiplayerGameData.skillMode || false,
                     happyMode: multiplayerGameData.happyMode || false,
-                    takeoffRule: multiplayerGameData.takeoffRule || 'even'
+                    takeoffRule: multiplayerGameData.takeoffRule || 'even',
+                    teams: multiplayerGameData.teams || null
                 };
                 this.updatePageTitle(multiplayerConfig);
 
@@ -378,6 +380,8 @@ class FlyingChessGame extends FlyingChessGameBase {
                     gameState.setHappyMode(multiplayerGameData.happyMode);
                 }
                 gameState.takeoffRule = multiplayerGameData.takeoffRule === 'six' ? 'six' : 'even';
+                gameState.teams = multiplayerGameData.teams || null;
+                gameState.teamMode = Boolean(multiplayerGameData.teamMode);
 
                 gameState.setIsOnlineMultiplayer(true);
 

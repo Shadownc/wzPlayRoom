@@ -51,7 +51,12 @@ server.on('upgrade', (request, socket, head) => {
 const flightRooms = new Map();
 const flightSend = (socket, data) => { if (socket.readyState === 1) socket.send(JSON.stringify(data)); };
 function flightRoomView(room) {
-  return { code: room.code, name: room.name, status: room.status === 'playing' ? 'playing' : 'waiting', gameState: room.status, host: room.players[0]?.id, isPrivate: room.isPrivate, settings: room.settings, players: room.players.map(({ id, name, color, ready, socket, gameSocket }, index) => ({ id, nickname: name, name, color, ready, isReady: ready, isHost: index === 0, isAI: false, isConnected: Boolean(socket || gameSocket), emoji: 'smile' })) };
+  return { code: room.code, name: room.name, status: room.status === 'playing' ? 'playing' : 'waiting', gameState: room.status, host: room.players[0]?.id, isPrivate: room.isPrivate, settings: room.settings, players: room.players.map(({ id, name, color, ready, socket, gameSocket }, index) => ({ id, nickname: name, name, color, team: room.settings.teamMode ? room.settings.teams[color] : null, ready, isReady: ready, isHost: index === 0, isAI: false, isConnected: Boolean(socket || gameSocket), emoji: 'smile' })) };
+}
+function normalizeFlightTeams(input) {
+  const teams = {};
+  for (const color of [1, 2, 3, 4]) teams[color] = Number(input?.[color]) === 2 ? 2 : 1;
+  return teams;
 }
 function flightPublicRoomList() {
   return Array.from(flightRooms.values())
@@ -103,7 +108,7 @@ flightWss.on('connection', socket => {
       let room = flightRooms.get(code);
       if (!room && msg.type === 'createRoom') {
         const nickname = String(data.nickname || '玩家').trim().slice(0, 16) || '玩家';
-        room = { code, name: `${nickname}的房间`, isPrivate: false, status: 'waiting', players: [], settings: { pieceCount: 4, happyMode: false, skillMode: false, initialEnergy: 0, takeoffRule: 'even' }, state: null, seq: 0, sessionId: randomUUID() };
+        room = { code, name: `${nickname}的房间`, isPrivate: false, status: 'waiting', players: [], settings: { pieceCount: 4, happyMode: false, skillMode: false, initialEnergy: 0, takeoffRule: 'even', teamMode: false, teams: { 1: 1, 2: 2, 3: 1, 4: 2 } }, state: null, seq: 0, sessionId: randomUUID() };
         flightRooms.set(code, room);
       }
       if (!room) { flightSend(socket, { type: 'error', message: '房间不存在' }); return; }
@@ -125,20 +130,26 @@ flightWss.on('connection', socket => {
     if (msg.type === 'toggle_ready') { player.ready = Boolean(data.isReady); flightBroadcastRoom(room, 'roomUpdated'); return; }
     if (msg.type === 'startGame') {
       if (room.players[0] !== player || room.players.length < 2) { flightSend(socket, { type: 'error', message: '至少两位玩家且需由房主开始' }); return; }
+      const requestedSettings = data.settings || {};
+      const teamModeRequested = typeof requestedSettings.teamMode === 'boolean' ? requestedSettings.teamMode : room.settings.teamMode;
+      if (teamModeRequested && room.players.length !== 4) { flightSend(socket, { type: 'error', message: '组队对战需要四位玩家' }); return; }
       if (!room.players.every(p => p.ready || p === room.players[0])) { flightSend(socket, { type: 'error', message: '请等待所有玩家准备' }); return; }
       room.status = 'playing';
-      const requestedSettings = data.settings || {};
       const suppliedPieceCount = Number(requestedSettings.pieceCount ?? room.settings.pieceCount);
       room.settings = {
         pieceCount: Number.isInteger(suppliedPieceCount) && suppliedPieceCount >= 1 && suppliedPieceCount <= 4 ? suppliedPieceCount : room.settings.pieceCount,
         happyMode: typeof requestedSettings.happyMode === 'boolean' ? requestedSettings.happyMode : room.settings.happyMode,
         skillMode: typeof requestedSettings.skillMode === 'boolean' ? requestedSettings.skillMode : room.settings.skillMode,
         initialEnergy: [0, 15, 30, 50, 70, 100].includes(Number(requestedSettings.initialEnergy)) ? Number(requestedSettings.initialEnergy) : room.settings.initialEnergy,
-        takeoffRule: requestedSettings.takeoffRule === 'six' ? 'six' : (room.settings.takeoffRule === 'six' ? 'six' : 'even')
+        takeoffRule: requestedSettings.takeoffRule === 'six' ? 'six' : (room.settings.takeoffRule === 'six' ? 'six' : 'even'),
+        teamMode: typeof requestedSettings.teamMode === 'boolean' ? requestedSettings.teamMode : room.settings.teamMode,
+        teams: normalizeFlightTeams(requestedSettings.teams || room.settings.teams)
       };
       const { createState } = await flightEngine;
-      room.state = createState({ players: room.players.map(p => p.color), piecesPerPlayer: room.settings.pieceCount || 4, happy: !!room.settings.happyMode, skillMode: !!room.settings.skillMode, startEnergy: room.settings.initialEnergy || 0, takeoffRule: room.settings.takeoffRule });
-      for (const p of room.players) if (p.socket) flightSend(p.socket, { type: 'gameStarted', gameSessionId: room.sessionId, roomCode: room.code, players: room.players.map(({id,name,color})=>({id,color,nickname:name,isAI:false,emoji:'smile'})), pieceCount: room.settings.pieceCount || 4, happyMode: !!room.settings.happyMode, skillMode: !!room.settings.skillMode, takeoffRule: room.settings.takeoffRule, isHost: p === room.players[0] });
+      const teams = room.settings.teamMode ? room.settings.teams : null;
+      room.state = createState({ players: room.players.map(p => p.color), piecesPerPlayer: room.settings.pieceCount || 4, happy: !!room.settings.happyMode, skillMode: !!room.settings.skillMode, startEnergy: room.settings.initialEnergy || 0, takeoffRule: room.settings.takeoffRule, teams });
+      room.state.teamMode = room.settings.teamMode;
+      for (const p of room.players) if (p.socket) flightSend(p.socket, { type: 'gameStarted', gameSessionId: room.sessionId, roomCode: room.code, players: room.players.map(({id,name,color})=>({id,color,nickname:name,isAI:false,emoji:'smile'})), pieceCount: room.settings.pieceCount || 4, happyMode: !!room.settings.happyMode, skillMode: !!room.settings.skillMode, takeoffRule: room.settings.takeoffRule, teamMode: room.settings.teamMode, teams, isHost: p === room.players[0] });
       await flightBroadcastState(room); return;
     }
     if (msg.type === 'intent' && room.status === 'playing') {
@@ -175,7 +186,10 @@ flightWss.on('connection', socket => {
       if (typeof settings.happyMode === 'boolean') room.settings.happyMode = settings.happyMode;
       if (typeof settings.skillMode === 'boolean') room.settings.skillMode = settings.skillMode;
       if (settings.takeoffRule === 'six' || settings.takeoffRule === 'even') room.settings.takeoffRule = settings.takeoffRule;
+      if (typeof settings.teamMode === 'boolean') room.settings.teamMode = settings.teamMode;
+      if (settings.teams && typeof settings.teams === 'object') room.settings.teams = normalizeFlightTeams(settings.teams);
       if ([0, 15, 30, 50, 70, 100].includes(Number(settings.initialEnergy))) room.settings.initialEnergy = Number(settings.initialEnergy);
+      flightSend(socket, { type: 'settingsUpdated', settings: room.settings, room: flightRoomView(room) });
       flightBroadcastRoom(room);
       for (const peer of room.players) if (peer.socket) flightSend(peer.socket, { type: 'roomsList', rooms: flightPublicRoomList() });
       return;

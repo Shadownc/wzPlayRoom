@@ -74,8 +74,8 @@ class EngineAdapter {
     }
 
     /** 开新局：完全由引擎重建初始状态 */
-    reset({ players = PLAYERS, piecesPerPlayer = 4, happy = false, skillMode = false, startEnergy = 0, takeoffRule = 'even', currentPlayer = null } = {}) {
-        this.state = createState({ players, piecesPerPlayer, happy, skillMode, startEnergy, takeoffRule });
+    reset({ players = PLAYERS, piecesPerPlayer = 4, happy = false, skillMode = false, startEnergy = 0, takeoffRule = 'even', teams = null, currentPlayer = null } = {}) {
+        this.state = createState({ players, piecesPerPlayer, happy, skillMode, startEnergy, takeoffRule, teams });
         this.defeatCounts = emptyDefeatMatrix(players);
         // 单机也要能回放：一局一颗种子，动作按序留档（和联机的服务端档案同一套口径）
         this.seed = Math.floor(Math.random() * 0xffffffff);
@@ -89,10 +89,10 @@ class EngineAdapter {
     }
 
     /** 读档 / 接管现有棋面：按前端已有位置重建引擎状态 */
-    hydrate({ playerChess, currentPlayer = 1, happy = false, skillMode = false, takeoffRule = 'even', players = PLAYERS } = {}) {
+    hydrate({ playerChess, currentPlayer = 1, happy = false, skillMode = false, takeoffRule = 'even', teams = null, players = PLAYERS } = {}) {
         const sample = playerChess && playerChess[players[0]];
         const piecesPerPlayer = sample ? sample.length : 4;
-        this.reset({ players, piecesPerPlayer, happy, skillMode, takeoffRule });
+        this.reset({ players, piecesPerPlayer, happy, skillMode, takeoffRule, teams });
 
         for (const id of players) {
             const source = playerChess[id] || [];
@@ -128,6 +128,7 @@ class EngineAdapter {
             happy: Boolean(snapshot.happyMode),
             skillMode: Boolean(snapshot.skillMode),
             takeoffRule: snapshot.takeoffRule || 'even',
+            teams: snapshot.teams || null,
             players
         });
 
@@ -135,6 +136,8 @@ class EngineAdapter {
         state.phase = snapshot.gamePhase === 'finished' ? 'ended' : (snapshot.gamePhase || 'rolling');
         state.dice = snapshot.diceValue > 0 ? snapshot.diceValue : null;
         state.takeoffRule = snapshot.takeoffRule === 'six' ? 'six' : 'even';
+        state.teams = snapshot.teams ? { ...state.teams, ...snapshot.teams } : state.teams;
+        state.teamMode = Boolean(snapshot.teamMode);
         // 积分是服务端算的：快照里带什么就是什么，本地不再自己记账
         if (snapshot.energy) {
             for (const id of state.order) {
@@ -279,8 +282,10 @@ class EngineAdapter {
             happy: Boolean(archive.happy),
             skillMode: Boolean(archive.skillMode),
             takeoffRule: archive.takeoffRule || 'even',
+            teams: archive.teams || null,
             startEnergy: Number(archive.startEnergy) || 0
         });
+        this.state.teamMode = Boolean(archive.teamMode);
         this.defeatCounts = emptyDefeatMatrix(archive.colors);
         this.seed = archive.seed;
         this.rng = makeRng(archive.seed);
@@ -346,6 +351,8 @@ class EngineAdapter {
             happy: this.state.happy ? 1 : 0,
             skillMode: this.state.skillMode ? 1 : 0,
             takeoffRule: this.state.takeoffRule,
+            teams: this.state.teams,
+            teamMode: Boolean(this.state.teamMode),
             startEnergy: gameState.getInitialEnergy ? gameState.getInitialEnergy() : 0,
             players: (players || []).map((p) => [p.color, p.nickname, p.isAI ? 1 : 0, p.emoji || '']),
             actionCount: this.actions.length,
@@ -364,6 +371,7 @@ class EngineAdapter {
         const state = this.state;
         if (!state) return;
         gameState.takeoffRule = state.takeoffRule === 'six' ? 'six' : 'even';
+        gameState.teams = state.teams;
 
         // 走 setter 而不是直接赋值：回合切换的彩色控制台日志挂在 setter 上，
         // 直接写字段会把它整段跳过

@@ -208,7 +208,7 @@ async function playCollisionBonus(event) {
     // 欢乐模式没有 beat 事件，碰撞按击败计入「第一滴血」
     gameState.recordFirstBeater(player);
     const collided = event.enemyCount || 1;
-    moveCollisions.set(player, (moveCollisions.get(player) || 0) + collided);
+    if (!event.teamStack) moveCollisions.set(player, (moveCollisions.get(player) || 0) + collided);
     if (silentReplay) {
         gameInfo.addCollisionBonus(player, targetPlayer, true, shown, steps || 0, energy || 0);
         if (energy) energyManager.addEnergyLine(player, energy, 'happy_bonus', targetPlayer, targets);
@@ -234,16 +234,16 @@ async function playBeat(event) {
     const isRemoteDiceMove = itemRoll === 'remote-dice';
     gameState.recordFirstBeater(player);
     if (isRunwayCell(event.cell)) gameState.recordRunwayKill(player);
-    moveBeats.set(player, (moveBeats.get(player) || 0) + 1);
+    if (!event.teamCapture) moveBeats.set(player, (moveBeats.get(player) || 0) + 1);
     if (silentReplay) {
-        gameInfo.addChessBeat(player, targetPlayer, chess, true, isRemoteDiceMove, beatDisplayEnergy(event));
+        gameInfo.addChessBeat(player, targetPlayer, chess, true, isRemoteDiceMove, beatDisplayEnergy(event), event.teamCapture);
         // 道具模式下面板会过滤掉上面这行（改用积分行代替），静默回放要补出同一条，
         // 否则刷新后这一局里所有的击败都不见了
         grantBeatEnergy(event, { animate: false });
         return;
     }
     audioManager.playBeatSound();
-    gameInfo.addChessBeat(player, targetPlayer, chess, true, isRemoteDiceMove, beatDisplayEnergy(event));
+    gameInfo.addChessBeat(player, targetPlayer, chess, true, isRemoteDiceMove, beatDisplayEnergy(event), event.teamCapture);
     // 先缓存被击败棋子的当前屏幕坐标，供随后的积分粒子动画作为起点
     window.gameInstance?.multiplayerGameManager?.cacheDefeatedChessPosition(targetPlayer, chess);
     grantBeatEnergy(event);
@@ -576,6 +576,10 @@ async function handleEvent(event, lastDiceValue = 0, lastDiceItem = null) {
             await playFinish(event);
             break;
         case 'beat':
+            if (event.teamCapture) {
+                await playBeat(event);
+                break;
+            }
             gameState.recordRevengeKill(event.player, event.targetPlayer, event.chess);
             if (currentMoveChess && currentMoveChess.player === event.player) {
                 gameState.recordOrioleKill(event.player, event.targetPlayer, event.chess);
@@ -587,6 +591,9 @@ async function handleEvent(event, lastDiceValue = 0, lastDiceItem = null) {
             break;
         case 'collision_bonus':
             await playCollisionBonus(event);
+            break;
+        case 'team_stack_bonus':
+            await playCollisionBonus({ ...event, teamStack: true, reward: 0, energy: 0 });
             break;
         case 'collide':
             await playCollide(event);

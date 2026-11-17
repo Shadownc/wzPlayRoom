@@ -111,7 +111,8 @@ export function nextJumpRel(rel) {
     return isJumpRel(rel) ? rel + JUMP_STEP : null;
 }
 
-export function createState({ players = PLAYERS, piecesPerPlayer = PIECES_PER_PLAYER, happy = false, skillMode = false, startEnergy = 0, takeoffRule = 'even' } = {}) {
+export function createState({ players = PLAYERS, piecesPerPlayer = PIECES_PER_PLAYER, happy = false, skillMode = false, startEnergy = 0, takeoffRule = 'even', teams = null } = {}) {
+    const activeTeams = normalizeTeams(players, teams);
     const state = {
         order: [...players],
         currentIndex: 0,
@@ -128,6 +129,8 @@ export function createState({ players = PLAYERS, piecesPerPlayer = PIECES_PER_PL
         happy,
         skillMode,
         takeoffRule: takeoffRule === 'six' ? 'six' : 'even',
+        teams: activeTeams,
+        teamMode: Boolean(teams),
         players: {},
         energy: {},
     };
@@ -140,7 +143,26 @@ export function createState({ players = PLAYERS, piecesPerPlayer = PIECES_PER_PL
         };
         state.energy[id] = Math.min(Math.max(0, startEnergy), ENERGY_MAX);
     }
+    if (teams) {
+        const activeTeamIds = [...new Set(players.map(player => activeTeams[player]))];
+        if (activeTeamIds.length === 2) {
+            state.winningTeams = activeTeamIds.map(team => players.filter(player => activeTeams[player] === team));
+        }
+    }
     return state;
+}
+
+function normalizeTeams(players, teams) {
+    const normalized = {};
+    for (const player of players) {
+        const team = Number(teams?.[player]);
+        normalized[player] = team === 1 || team === 2 ? team : player;
+    }
+    return normalized;
+}
+
+function isEnemy(state, playerA, playerB) {
+    return playerA !== playerB && state.teams?.[playerA] !== state.teams?.[playerB];
 }
 
 export function movableChess(state, playerId, dice) {
@@ -170,10 +192,24 @@ function stackAtCell(state, cell) {
     return null;
 }
 
+function enemyStackAtCell(state, cell, player) {
+    if (cell === null) return null;
+    for (const id of state.order) {
+        if (!isEnemy(state, id, player)) continue;
+        const cells = [];
+        state.players[id].chesses.forEach((chess, index) => {
+            if (chess.finished || chess.pos === BASE) return;
+            if (cellOf(id, chess.pos) === cell) cells.push({ player: id, index });
+        });
+        if (cells.length >= 2) return { player: id, cell, cells, count: cells.length };
+    }
+    return null;
+}
+
 function enemyAtCell(state, cell, excludePlayer) {
     if (cell === null) return null;
     for (const id of state.order) {
-        if (id === excludePlayer) continue;
+        if (!isEnemy(state, id, excludePlayer)) continue;
         const chesses = state.players[id].chesses;
         for (let index = 0; index < chesses.length; index++) {
             const chess = chesses[index];
@@ -184,11 +220,43 @@ function enemyAtCell(state, cell, excludePlayer) {
     return null;
 }
 
+function teammatePiecesAtCell(state, cell, player) {
+    const found = [];
+    if (cell === null) return found;
+    for (const id of state.order) {
+        if (id === player || !state.teamMode || !state.teams || state.teams[id] !== state.teams[player]) continue;
+        state.players[id].chesses.forEach((chess, index) => {
+            if (!chess.finished && chess.pos !== BASE && cellOf(id, chess.pos) === cell) found.push({ player: id, index });
+        });
+    }
+    return found;
+}
+
+function takeTeammateAtCell(state, cell, player, events) {
+    const teammates = teammatePiecesAtCell(state, cell, player);
+    if (!teammates.length || !beatable(cell) || !state.teamMode) return false;
+    if (teammates.length >= 2) {
+        events.push({ type: 'collision_bonus', player, targetPlayer: teammates[0].player, cell, enemyCount: teammates.length, teamStack: true, steps: 2, reward: 0, energy: 0 });
+        const mover = state.players[player].chesses.find(chess => chess.pos !== BASE && !chess.finished && cellOf(player, chess.pos) === cell);
+        if (!mover) return true;
+        const index = state.players[player].chesses.indexOf(mover);
+        const from = mover.pos;
+        state.players[player].totalDistance += 2;
+        walk(state, player, index, { fromRel: from, forward: 2, back: 0 }, events);
+        return true;
+    }
+    const target = teammates[0];
+    sendHome(state, target.player, target.index);
+    state.players[player].defeats += 1;
+    events.push({ type: 'beat', player, targetPlayer: target.player, chess: target.index, cell, teamCapture: true, reward: 0, energy: 0 });
+    return true;
+}
+
 /** 同一格上某位对手的全部棋子（欢乐模式按颗数算奖励，因此要拿全） */
 function enemiesAtCell(state, cell, excludePlayer) {
     if (cell === null) return [];
     for (const id of state.order) {
-        if (id === excludePlayer) continue;
+        if (!isEnemy(state, id, excludePlayer)) continue;
         const found = [];
         state.players[id].chesses.forEach((chess, index) => {
             if (chess.finished || chess.pos === BASE) return;
@@ -256,6 +324,7 @@ function beatAtCell(state, cell, byPlayer, events, { allowCross = false } = {}) 
     // 欢乐模式没有击败：落在敌人格上走 happyCollision（奖励前进），不做任何送人回基地
     if (state.happy) return null;
     if (!beatable(cell, allowCross)) return null;
+    if (state.teamMode && teammatePiecesAtCell(state, cell, byPlayer).length) return null;
     const target = enemyAtCell(state, cell, byPlayer);
     if (!target) return null;
     // 被击败棋子当时的落点：击败积分按对手损失的完成度算，得在送回基地之前量下来
@@ -276,6 +345,14 @@ const HAPPY_CHAIN_LIMIT = 32;
 /** 某个「停下」的格子上的碰撞：有人就记账（击败、积分）并给出一条事件，没有返回 null */
 function takeHappyCollision(state, player, rel) {
     const cell = cellOf(player, rel);
+    const teammates = teammatePiecesAtCell(state, cell, player);
+    if (teammates.length) {
+        if (teammates.length === 1) {
+            sendHome(state, teammates[0].player, teammates[0].index);
+            return { type: 'beat', player, targetPlayer: teammates[0].player, chess: teammates[0].index, cell, teamCapture: true, reward: 0, energy: 0, steps: 0 };
+        }
+        return { type: 'collision_bonus', player, targetPlayer: teammates[0].player, cell, enemyCount: teammates.length, teamStack: true, steps: 2, reward: 0, energy: 0 };
+    }
     const enemies = enemiesAtCell(state, cell, player);
     if (!enemies.length) return null;
 
@@ -310,10 +387,22 @@ function happyCollision(state, player, index, events) {
         if (chess.finished) return;
 
         let steps = 0;
-        const landed = takeHappyCollision(state, player, state.players[player].chesses[index].pos);
+        const landedRel = state.players[player].chesses[index].pos;
+        const landedTeam = teammatePiecesAtCell(state, cellOf(player, landedRel), player);
+        const landed = landedTeam.length
+            ? (landedTeam.length === 1
+                ? { type: 'beat', player, targetPlayer: landedTeam[0].player, chess: landedTeam[0].index, cell: cellOf(player, landedRel), teamCapture: true, reward: 0, energy: 0, steps: 0 }
+                : { type: 'collision_bonus', player, targetPlayer: landedTeam[0].player, cell: cellOf(player, landedRel), enemyCount: landedTeam.length, teamStack: true, steps: 2, reward: 0, energy: 0 })
+            : takeHappyCollision(state, player, landedRel);
+        if (landed?.teamCapture) sendHome(state, landed.targetPlayer, landed.chess);
         if (landed) {
             events.push(landed);
             steps += landed.steps;
+        }
+        if (landed?.teamStack) {
+            const from = state.players[player].chesses[index].pos;
+            walk(state, player, index, { fromRel: from, forward: 2, back: 0 }, events);
+            return;
         }
 
         const mark = events.length;
@@ -358,8 +447,7 @@ function emitStack(state, player, rel, events) {
 }
 
 function opponentStackAtCross(state, player) {
-    const stack = stackAtCell(state, crossCellOf(player));
-    return stack && stack.player === OPPOSITE[player] ? stack : null;
+    return enemyStackAtCell(state, crossCellOf(player), player);
 }
 
 function stackInMovePath(state, player, fromRel, steps) {
@@ -367,8 +455,9 @@ function stackInMovePath(state, player, fromRel, steps) {
     for (let step = 1; step <= steps; step++) {
         const rel = fromRel + step;
         if (rel > 50) break;
-        const stack = stackAtCell(state, cellOf(player, rel));
-        if (stack && stack.player !== player) {
+        const cell = cellOf(player, rel);
+        const stack = enemyStackAtCell(state, cell, player);
+        if (stack) {
             return {
                 rel,
                 cell: cellOf(player, rel),
@@ -380,6 +469,12 @@ function stackInMovePath(state, player, fromRel, steps) {
                 cells: stack.cells,
             };
         }
+        if (state.teamMode && step === steps) {
+            const teammateStack = stackAtCell(state, cell);
+            if (teammateStack && teammateStack.player !== player && state.teams[teammateStack.player] === state.teams[player]) {
+                return { rel, cell, distance: step, remaining: 0, isExactHit: true, needsBounce: false, player: teammateStack.player, cells: teammateStack.cells, teamStack: true };
+            }
+        }
     }
     return null;
 }
@@ -389,8 +484,8 @@ function stackInJumpPath(state, player, fromRel, toRel) {
     const lo = Math.min(fromRel, toRel);
     const hi = Math.max(fromRel, toRel);
     for (let rel = lo + 1; rel < hi; rel++) {
-        const stack = stackAtCell(state, cellOf(player, rel));
-        if (stack && stack.player !== player) return { rel, cell: cellOf(player, rel), player: stack.player };
+        const stack = enemyStackAtCell(state, cellOf(player, rel), player);
+        if (stack) return { rel, cell: cellOf(player, rel), player: stack.player };
     }
     return null;
 }
@@ -455,12 +550,17 @@ function resolveMove(state, player, index, events) {
     const bounceReason = stackBounce ? 'stack' : (overshoot ? 'overshoot' : null);
     const blocker = stackBounce ? stack.player : null;
     const finished = walk(state, player, index, { fromRel, forward, back, bounceReason, blocker }, events);
+    let teammateStackHit = false;
     if (finished) {
-        if (state.players[player].chesses.every((c) => c.finished)) state.winner = player;
+        if (state.players[player].chesses.every(c => c.finished)) state.winner = player;
         return;
     }
 
     if (stackCrash) {
+        if (stack.teamStack || (stack.player !== player && state.teamMode && state.teams[stack.player] === state.teams[player])) {
+            events.push({ type: 'collision_bonus', player, targetPlayer: stack.player, cell: stack.cell, enemyCount: stack.cells.length, teamStack: true, steps: 2, reward: 0, energy: 0 });
+            teammateStackHit = true;
+        } else {
         // 被撞回家的每颗棋子都按击败结算给撞的人加分（落点要在送回基地之前量）。
         // 遥控骰子撞的同样不给分，和单颗击败一致；累计值另记一份未截断的 reward 供显示
         let gain = 0;
@@ -477,10 +577,16 @@ function resolveMove(state, player, index, events) {
         for (const victim of stack.cells) sendHome(state, victim.player, victim.index);
         events.push({ type: 'collide', player, targetPlayer: stack.player, cell: stack.cell, chesses: stack.cells, reward, energy: gain });
         return;
+        }
     }
 
     if (stackBounce || overshoot) {
         if (state.happy) happyCollision(state, player, index, events);
+        else if (teammateStackHit) {
+            state.players[player].totalDistance += 2;
+            const bonusFinished = walk(state, player, index, { fromRel: chess.pos, forward: 2, back: 0 }, events);
+            if (bonusFinished && state.players[player].chesses.every(c => c.finished)) state.winner = player;
+        }
         else beatAtCell(state, cellOf(player, chess.pos), player, events);
         return;
     }
@@ -493,8 +599,16 @@ function resolveMove(state, player, index, events) {
     }
 
     beatAtCell(state, cellOf(player, chess.pos), player, events);
+    if (!teammateStackHit && takeTeammateAtCell(state, cellOf(player, chess.pos), player, events)) return;
+    if (teammateStackHit) {
+        state.players[player].totalDistance += 2;
+        const bonusFinished = walk(state, player, index, { fromRel: chess.pos, forward: 2, back: 0 }, events);
+        if (bonusFinished && state.players[player].chesses.every(c => c.finished)) state.winner = player;
+        return;
+    }
     handleSpecialPositions(state, player, index, chess.pos, events);
     beatAtCell(state, cellOf(player, chess.pos), player, events);
+    if (takeTeammateAtCell(state, cellOf(player, chess.pos), player, events)) return;
     emitStack(state, player, chess.pos, events);
 }
 
@@ -516,6 +630,7 @@ function handleSpecialPositions(state, player, index, rel, events) {
 
     if (rel === FLY_ENTRY) {
         beatAtCell(state, cellOf(player, rel), player, events);
+        if (takeTeammateAtCell(state, cellOf(player, rel), player, events)) return true;
         if (blocked) {
             events.push({ type: 'blocked', reason: 'cross-stack', player, chess: index, cell: crossCellOf(player), targetPlayer: crossStack.player });
             jump(state, player, index, rel + JUMP_STEP, events);
@@ -551,7 +666,7 @@ function jump(state, player, index, targetRel, events) {
     }
 
     const targetStack = stackAtCell(state, targetCell);
-    if (targetStack && targetStack.player !== player) {
+    if (targetStack && isEnemy(state, targetStack.player, player)) {
         events.push({ type: 'blocked', reason: 'jump-target-stack', player, chess: index, cell: targetCell, targetPlayer: targetStack.player });
         beatAtCell(state, fromCell, player, events);
         return;
@@ -575,8 +690,8 @@ function fly(state, player, index, targetRel, events) {
             events.push({ type: 'blocked', reason: 'cross-stack', player, chess: index, cell: crossCellOf(player), targetPlayer: crossStack.player });
             return;
         }
-        const targetStack = stackAtCell(state, targetCell);
-        if (targetStack && targetStack.player !== player) {
+        const targetStack = enemyStackAtCell(state, targetCell, player);
+        if (targetStack) {
             sendHome(state, player, index);
             for (const victim of targetStack.cells) sendHome(state, victim.player, victim.index);
             events.push({ type: 'collide', player, targetPlayer: targetStack.player, cell: targetCell, chesses: targetStack.cells });
@@ -590,10 +705,8 @@ function fly(state, player, index, targetRel, events) {
 
     const cross = crossCellOf(player);
     // 交叉点是两两共用的（1/3、2/4），2 人局或 3 人局里对家可能根本不在局中
-    const opposite = state.players[OPPOSITE[player]];
-    const opponentAtCross = Boolean(opposite) && opposite.chesses.some(
-        (c) => !c.finished && c.pos === RUNWAY_START + CROSS_STEP - 1
-    );
+    const opponentAtCross = state.order.some(id => isEnemy(state, id, player)
+        && state.players[id].chesses.some(c => !c.finished && c.pos === RUNWAY_START + CROSS_STEP - 1));
     if (opponentAtCross) beatAtCell(state, cross, player, events, { allowCross: true });
 
     beatAtCell(state, targetCell, player, events);
@@ -692,7 +805,7 @@ function applyDebug(state, playerId, action, events, rng) {
             chess.finished = true;
             events.push({ type: 'finish', player, chess: index });
         });
-        if (chesses.every((chess) => chess.finished)) {
+        if (state.players[player].chesses.every(chess => chess.finished)) {
             state.winner = player;
             state.phase = 'ended';
             events.push({ type: 'end', winner: player });
@@ -935,6 +1048,8 @@ export function toSnapshot(state, { gameSessionId = null, seq = 0, events = [], 
         happyMode: state.happy,
         skillMode: state.skillMode,
         takeoffRule: state.takeoffRule,
+        teams: state.teams,
+        teamMode: Boolean(state.teamMode),
         energy,
         playerChess,
         defeats,

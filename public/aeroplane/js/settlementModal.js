@@ -1058,7 +1058,7 @@ class SettlementModal {
                 player: player,
                 progress: progress,
                 defeatCounts: defeatCounts,
-                isWinner: player === winnerPlayer
+                isWinner: player === winnerPlayer || (this.gameState.teamMode && this.gameState.teams?.[player] === this.gameState.teams?.[winnerPlayer])
             });
         });
         // 按完成度排序（获胜者优先，然后按进度排序）

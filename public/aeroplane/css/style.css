@@ -5736,6 +5736,90 @@ use[href="#checkmark"] {
     font-variant-numeric: tabular-nums;
 }
 
+.team-mode-setting {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.team-mode-setting > .toggle-option {
+    width: 100%;
+    justify-content: space-between;
+}
+
+.team-player-options[hidden],
+.team-player-options[style*="display: none"] {
+    display: none;
+}
+
+.team-player-options {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-soft);
+}
+
+.team-player-label,
+.team-mode-hint {
+    color: var(--text-gray);
+    font-size: 12px;
+}
+
+.team-player-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.team-player-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    min-width: 0;
+    padding: 6px;
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    background: var(--surface);
+}
+
+.team-player-row > span {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.team-choice {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 3px;
+}
+
+.team-choice button {
+    padding: 4px 5px;
+    border: 1px solid var(--border-soft);
+    border-radius: 5px;
+    background: var(--bg-light-1);
+    color: var(--text-secondary);
+    font-size: 10px;
+    cursor: pointer;
+}
+
+.team-choice button.selected {
+    border-color: var(--periwinkle);
+    background: var(--periwinkle-soft);
+    color: var(--on-color-ink-strong);
+}
+
+.team-choice button:disabled {
+    cursor: default;
+}
+
 @media (max-width: 480px) {
     .takeoff-rule-setting {
         gap: 10px;
