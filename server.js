@@ -14,6 +14,8 @@ const server = http.createServer((req, res) => {
   const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
   const aeroplaneRoutes = {
     '/aeroplane': '/aeroplane/index.html',
+    '/bomb': '/index.html',
+    '/bomb/': '/index.html',
     '/aeroplane/': '/aeroplane/index.html',
     '/aeroplane/game': '/aeroplane/game.html',
     '/aeroplane/stats': '/aeroplane/stats.html',
@@ -42,9 +44,10 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ noServer: true });
 const flightWss = new WebSocketServer({ noServer: true });
+const bombWss = new WebSocketServer({ noServer: true });
 server.on('upgrade', (request, socket, head) => {
   const pathname = new URL(request.url, 'http://localhost').pathname;
-  const target = pathname === '/ws' ? wss : pathname === '/flight-ws' ? flightWss : null;
+  const target = pathname === '/ws' ? wss : pathname === '/flight-ws' ? flightWss : pathname === '/bomb-ws' ? bombWss : null;
   if (!target) { socket.destroy(); return; }
   target.handleUpgrade(request, socket, head, client => target.emit('connection', client, request));
 });
@@ -207,6 +210,39 @@ flightWss.on('connection', socket => {
   });
 });
 const send = (socket, message) => { if (socket.readyState === 1) socket.send(JSON.stringify(message)); };
+const bombRooms = new Map();
+function bombBroadcast(room) {
+  for (const player of room.players) send(player.socket, { type: 'state', room: room.code, players: room.players.map(({ name }, index) => ({ name, index })), turn: room.turn, min: room.min, max: room.max, lastGuess: room.lastGuess, status: room.status, loser: room.loser, yourIndex: player.index });
+}
+bombWss.on('connection', socket => {
+  socket.on('message', raw => {
+    let message; try { message = JSON.parse(raw); } catch { return; }
+    if (message.type === 'join') {
+      const code = String(message.room || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+      if (code.length < 4) { send(socket, { type: 'error', message: '房间码至少需要 4 位' }); return; }
+      let room = bombRooms.get(code);
+      if (!room && message.create) { room = { code, players: [], min: 1, max: 100, bomb: 1 + Math.floor(Math.random() * 100), turn: 0, lastGuess: null, status: 'waiting', loser: null }; bombRooms.set(code, room); }
+      if (!room) { send(socket, { type: 'error', message: '没有找到这个房间' }); return; }
+      if (room.status !== 'waiting' || room.players.length >= 8) { send(socket, { type: 'error', message: '房间已开始或人数已满' }); return; }
+      const player = { socket, index: room.players.length, name: String(message.name || `玩家${room.players.length + 1}`).trim().slice(0, 16) || `玩家${room.players.length + 1}` };
+      room.players.push(player); socket.roomCode = code; socket.playerIndex = player.index; bombBroadcast(room); return;
+    }
+    const room = bombRooms.get(socket.roomCode);
+    if (!room || room.players[socket.playerIndex]?.socket !== socket) return;
+    if (message.type === 'start' && socket.playerIndex === 0 && room.players.length >= 1 && room.status === 'waiting') {
+      room.min = 1; room.max = 100; room.bomb = 1 + Math.floor(Math.random() * 100); room.turn = 0; room.lastGuess = null; room.loser = null; room.status = 'playing'; bombBroadcast(room);
+    }
+    if (message.type === 'guess' && room.status === 'playing' && room.turn === socket.playerIndex) {
+      const guess = Number(message.value);
+      if (!Number.isInteger(guess) || guess < room.min || guess > room.max) { send(socket, { type: 'error', message: `请输入 ${room.min} 到 ${room.max} 之间的整数` }); return; }
+      room.lastGuess = { player: socket.playerIndex, value: guess };
+      if (guess === room.bomb) { room.status = 'finished'; room.loser = socket.playerIndex; }
+      else { if (guess < room.bomb) room.min = guess; else room.max = guess; room.turn = (room.turn + 1) % room.players.length; }
+      bombBroadcast(room);
+    }
+  });
+  socket.on('close', () => { const room = bombRooms.get(socket.roomCode); if (!room) return; room.players = room.players.filter(player => player.socket !== socket); room.players.forEach((player, index) => { player.index = index; }); if (!room.players.length) bombRooms.delete(room.code); else { room.status = 'waiting'; room.loser = null; room.turn = 0; bombBroadcast(room); } });
+});
 function roomState(room) { return { type: 'state', room: room.code, players: room.players.filter(Boolean).length, board: room.board, turn: room.turn, winner: room.winner, yourSide: null }; }
 function broadcast(room) {
   room.players.forEach((player, side) => { if (player) send(player, { ...roomState(room), yourSide: side }); });

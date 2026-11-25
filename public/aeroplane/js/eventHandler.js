@@ -591,7 +591,7 @@ class EventHandler {
 
             // 人机 / 本地多人：直接回主菜单，不要落回上次的配置面板
             sessionStorage.removeItem('lastGameMode');
-            window.location.replace('/');
+            window.location.replace('/#home');
         } catch (error) {
             console.error('返回主页时出错:', error);
         }

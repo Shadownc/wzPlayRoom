@@ -33,7 +33,12 @@
         <article class="featured game-entry flight-feature" data-category="board">
           <div class="feature-visual flight-visual"><div class="visual-top"><span class="live-tag"><i></i> NOW PLAYING</span><span class="visual-count">2–4 PLAYERS</span></div><div class="flight-board-art" aria-hidden="true"><div class="flight-home red-home"></div><div class="flight-home blue-home"></div><div class="flight-home yellow-home"></div><div class="flight-home green-home"></div><div class="flight-cross"></div><span class="flight-piece red-piece">✈</span><span class="flight-piece blue-piece">✈</span><span class="flight-piece yellow-piece">✈</span><span class="flight-piece green-piece">✈</span></div><div class="visual-caption"><span>四色棋盘</span><span>单人 AI · 本地 · 好友联机</span></div></div>
           <div class="feature-info"><div class="game-title-row"><div><p class="eyebrow">02 / BOARD GAME</p><h3>飞行棋</h3></div><span class="players-pill"><i></i> 适合 2–4 人</span></div><p class="game-description">掷骰起飞，沿航线竞速回家。可以挑战 AI、和身边朋友同屏玩，也能创建房间邀请好友在线对战。</p><div class="feature-bottom"><div class="mode-list"><span>人机对战</span><span>本地多人</span><span>好友房间</span></div><a class="primary-button" href="/aeroplane/">开始游戏 <span>→</span></a></div></div>
-        </article>      </section>
+        </article>
+        <article class="featured game-entry bomb-feature" data-category="party">
+          <div class="bomb-art"><span>01 — 100</span><strong>💣</strong><i>BOOM!</i></div>
+          <div class="feature-info"><div class="game-title-row"><div><p class="eyebrow">03 / PARTY GAME</p><h3>数字炸弹</h3></div><span class="players-pill"><i></i> 2–8 人</span></div><p class="game-description">轮流猜数字，安全范围不断缩小。踩中炸弹数字的人输掉这一局！</p><div class="feature-bottom"><div class="mode-list"><span>好友房间</span><span>多人轮流</span></div><a class="primary-button" href="/bomb/">开始游戏 <span>→</span></a></div></div>
+        </article>
+      </section>
       <footer><span>晚栀 PLAYROOM</span><span>好游戏，随时开局。</span><span>v 1.0</span></footer>
     </main>
   </div>
@@ -43,6 +48,12 @@
     <div class="game-page-tabs" role="tablist"><button class="mode-tab active" data-mode="ai">人机对战</button><button class="mode-tab" data-mode="local">本地双人</button><button class="mode-tab" data-mode="online">好友对战</button></div>
     <section class="online-setup" id="onlineSetup" hidden><div class="online-setup-copy"><span class="setup-icon">↗</span><div><h2>和好友来一局</h2><p>创建房间并分享房间码，或输入好友的房间码加入。</p></div></div><div class="setup-actions"><button class="primary-button" id="createRoom">创建房间 <span>＋</span></button><div class="join-controls"><input id="roomCode" maxlength="6" placeholder="输入 4–6 位房间码" autocomplete="off"><button id="joinRoom">加入房间 <span>→</span></button><button id="copyRoom" class="copy-room" type="button" title="复制房间码" aria-label="复制房间码">复制</button></div></div><p id="roomMessage" class="room-message">房间创建后会显示在这里。</p></section>
     <div class="play-area"><div class="board-wrap"><div id="board" class="board" role="grid" aria-label="五子棋棋盘"></div></div><aside class="game-sidebar"><div class="turn-card"><div class="turn-icon" id="turnIcon">●</div><div><span class="eyebrow">CURRENT TURN</span><strong id="turnText">你的回合</strong></div></div><div class="difficulty" id="difficulty"><label for="level">AI 难度</label><select id="level"><option value="easy">轻松</option><option value="normal" selected>标准</option><option value="hard">挑战</option></select></div><div class="sidebar-divider"></div><div class="game-actions"><button class="outline-button" id="restart">重新开始</button></div><div class="player-legend" id="playerLegend"><span><i class="legend-stone black-stone"></i><span id="blackLabel">你 · 黑棋</span></span><span><i class="legend-stone white-stone"></i><span id="whiteLabel">AI · 白棋</span></span></div><p class="hint" id="gameHint">先连成五子的一方获胜。</p></aside></div>
+  </main>
+  <main id="bombPage" class="bomb-page" hidden>
+    <div class="bomb-shell"><a class="back-link" href="/#home">← <span>游戏大厅</span></a><header><p class="eyebrow">PARTY GAME / 03</p><h1>数字炸弹</h1><p>猜中炸弹数字的人就输了，和好友轮流缩小安全范围。</p></header>
+      <section class="bomb-setup" id="bombSetup"><button class="primary-button" id="bombSolo">单人练习</button><button class="outline-button" id="bombCreate">创建好友房间</button><div class="bomb-join"><input id="bombCode" maxlength="6" placeholder="房间码"><button id="bombJoin">加入</button></div><p id="bombMessage" aria-live="polite">单人练习无需连接服务器；好友房间支持 2–8 人。</p></section>
+      <section class="bomb-table" id="bombTable" hidden><div class="bomb-range"><span>安全范围</span><strong id="bombRange">1 — 100</strong></div><ol id="bombPlayers"></ol><form id="bombGuessForm"><input id="bombGuess" type="number" placeholder="输入范围内的数字" required><button class="primary-button">猜一个</button></form><p id="bombStatus" aria-live="polite"></p><button id="bombStart" class="outline-button" hidden>再开一局</button></section>
+    </div>
   </main>
   <div id="resultOverlay" class="result-overlay" hidden>
     <div class="fireworks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
@@ -56,5 +67,6 @@
     </section>
   </div>
   <script src="/app.js"></script>
+  <script src="/bomb.js?v=2"></script>
 </body>
 </html>

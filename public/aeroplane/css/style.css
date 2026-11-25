@@ -2412,6 +2412,15 @@ use[href="#checkmark"] {
     box-shadow: 0 1px 3px var(--shadow-2);
 }
 
+.return-lobby-btn {
+    width: 100%;
+    min-height: 44px;
+    margin-top: 6px;
+    color: var(--text-primary);
+    background: var(--bg-light-1);
+    border-color: var(--border-medium);
+}
+
 .control-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
@@ -4755,6 +4764,19 @@ use[href="#checkmark"] {
     box-sizing: border-box;
     width: 100%;
     overflow-x: hidden;
+}
+
+.lobby-menu-btn {
+    box-sizing: border-box;
+    width: 100%;
+    flex: 0 0 60px;
+    color: var(--text-primary);
+    text-decoration: none;
+}
+
+.lobby-menu-btn .menu-btn-icon {
+    font-size: 25px;
+    font-weight: 500;
 }
 
 /* 标题区域 */
